@@ -14,9 +14,10 @@ export interface Car {
   speed: number;
   waiting: boolean;
   waitTime: number; // Time spent waiting/stuck
-  targetNodeId: string | null; // Next node it's heading to
-  fromDirection: Direction; // The direction it comes FROM into the target node
+  targetNodeId?: string; // Node ID it is currently heading towards
+  fromDirection: Direction; // N, S, W, E
   intendedTurn: 'straight' | 'left' | 'right';
+  isEmergency?: boolean;
 }
 
 export class TrafficSimulation {
@@ -42,22 +43,34 @@ export class TrafficSimulation {
   private carIdCounter = 0;
   
   private nodePositions = [
-    { id: 'n00', x: -50, z: -50 },
-    { id: 'n10', x: 50, z: -50 },
-    { id: 'n01', x: -50, z: 50 },
-    { id: 'n11', x: 50, z: 50 },
+    { id: 'n00', x: -100, z: -100 },
+    { id: 'n10', x: 0, z: -100 },
+    { id: 'n20', x: 100, z: -100 },
+    { id: 'n01', x: -100, z: 0 },
+    { id: 'n11', x: 0, z: 0 },
+    { id: 'n21', x: 100, z: 0 },
+    { id: 'n02', x: -100, z: 100 },
+    { id: 'n12', x: 0, z: 100 },
+    { id: 'n22', x: 100, z: 100 },
   ];
   
   // Define external entry points mapping to first node and direction it comes from
   private entryPoints = [
-    { startX: -50, startZ: -100, targetId: 'n00', fromDir: 'N' },
-    { startX: 50, startZ: -100, targetId: 'n10', fromDir: 'N' },
-    { startX: -50, startZ: 100, targetId: 'n01', fromDir: 'S' },
-    { startX: 50, startZ: 100, targetId: 'n11', fromDir: 'S' },
-    { startX: -100, startZ: -50, targetId: 'n00', fromDir: 'W' },
-    { startX: -100, startZ: 50, targetId: 'n01', fromDir: 'W' },
-    { startX: 100, startZ: -50, targetId: 'n10', fromDir: 'E' },
-    { startX: 100, startZ: 50, targetId: 'n11', fromDir: 'E' },
+    { startX: -100, startZ: -250, targetId: 'n00', fromDir: 'N' },
+    { startX: 0, startZ: -250, targetId: 'n10', fromDir: 'N' },
+    { startX: 100, startZ: -250, targetId: 'n20', fromDir: 'N' },
+    
+    { startX: -100, startZ: 250, targetId: 'n02', fromDir: 'S' },
+    { startX: 0, startZ: 250, targetId: 'n12', fromDir: 'S' },
+    { startX: 100, startZ: 250, targetId: 'n22', fromDir: 'S' },
+    
+    { startX: -250, startZ: -100, targetId: 'n00', fromDir: 'W' },
+    { startX: -250, startZ: 0, targetId: 'n01', fromDir: 'W' },
+    { startX: -250, startZ: 100, targetId: 'n02', fromDir: 'W' },
+    
+    { startX: 250, startZ: -100, targetId: 'n20', fromDir: 'E' },
+    { startX: 250, startZ: 0, targetId: 'n21', fromDir: 'E' },
+    { startX: 250, startZ: 100, targetId: 'n22', fromDir: 'E' },
   ] as const;
 
   constructor() {
@@ -206,8 +219,8 @@ export class TrafficSimulation {
       }
     }
 
-    // 3. Remove cars that went off map or have been stuck for > 30 seconds (God Hand)
-    this.cars = this.cars.filter(car => Math.abs(car.x) < 150 && Math.abs(car.z) < 150 && car.waitTime < 30);
+    // 3. Remove cars that went off map or have been stuck for > 60 seconds (God Hand)
+    this.cars = this.cars.filter(car => Math.abs(car.x) < 280 && Math.abs(car.z) < 280 && car.waitTime < 60);
   }
 
   private moveCar(car: Car, speed: number, dt: number) {
@@ -225,58 +238,55 @@ export class TrafficSimulation {
     return 'straight';
   }
 
+  private getAdjacentNode(node: {x:number, z:number}, dir: Direction): string | undefined {
+      let target = undefined;
+      let minDist = Infinity;
+      for (let n of this.nodePositions) {
+          if (dir === 'N' && n.x === node.x && n.z < node.z && (node.z - n.z) < minDist) { target = n.id; minDist = node.z - n.z; }
+          if (dir === 'S' && n.x === node.x && n.z > node.z && (n.z - node.z) < minDist) { target = n.id; minDist = n.z - node.z; }
+          if (dir === 'W' && n.z === node.z && n.x < node.x && (node.x - n.x) < minDist) { target = n.id; minDist = node.x - n.x; }
+          if (dir === 'E' && n.z === node.z && n.x > node.x && (n.x - node.x) < minDist) { target = n.id; minDist = n.x - node.x; }
+      }
+      return target;
+  }
+
   private decideNextTarget(car: Car, currentNode: Node) {
-    // Snap to center to avoid drifting
+    // Phase 3 Bugfix: Snap to center to prevent crooked driving
     car.x = currentNode.x;
     car.z = currentNode.z;
     
-    const turn = car.intendedTurn;
-
-    // Map turn to new fromDirection
-    let newDir = car.fromDirection; // straight keeps same fromDir
-    if (turn === 'left') {
-        if (car.fromDirection === 'N') newDir = 'W'; // Going S, turn left -> going E (comes from W)
-        else if (car.fromDirection === 'S') newDir = 'E'; // Going N, turn left -> going W (comes from E)
-        else if (car.fromDirection === 'W') newDir = 'S'; // Going E, turn left -> going N (comes from S)
-        else if (car.fromDirection === 'E') newDir = 'N'; // Going W, turn left -> going S (comes from N)
-    } else if (turn === 'right') {
-        if (car.fromDirection === 'N') newDir = 'E'; // Going S, turn right -> going W (comes from E)
-        else if (car.fromDirection === 'S') newDir = 'W'; // Going N, turn right -> going E (comes from W)
-        else if (car.fromDirection === 'W') newDir = 'N'; // Going E, turn right -> going S (comes from N)
-        else if (car.fromDirection === 'E') newDir = 'S'; // Going W, turn right -> going N (comes from S)
+    let nextNodeId = undefined;
+    let newDir = car.fromDirection;
+    
+    if (car.fromDirection === 'N') {
+        if (car.intendedTurn === 'straight') { nextNodeId = this.getAdjacentNode(currentNode, 'S'); newDir = 'N'; }
+        else if (car.intendedTurn === 'left') { nextNodeId = this.getAdjacentNode(currentNode, 'E'); newDir = 'W'; }
+        else if (car.intendedTurn === 'right') { nextNodeId = this.getAdjacentNode(currentNode, 'W'); newDir = 'E'; }
+    } else if (car.fromDirection === 'S') {
+        if (car.intendedTurn === 'straight') { nextNodeId = this.getAdjacentNode(currentNode, 'N'); newDir = 'S'; }
+        else if (car.intendedTurn === 'left') { nextNodeId = this.getAdjacentNode(currentNode, 'W'); newDir = 'E'; }
+        else if (car.intendedTurn === 'right') { nextNodeId = this.getAdjacentNode(currentNode, 'E'); newDir = 'W'; }
+    } else if (car.fromDirection === 'W') {
+        if (car.intendedTurn === 'straight') { nextNodeId = this.getAdjacentNode(currentNode, 'E'); newDir = 'W'; }
+        else if (car.intendedTurn === 'left') { nextNodeId = this.getAdjacentNode(currentNode, 'S'); newDir = 'N'; }
+        else if (car.intendedTurn === 'right') { nextNodeId = this.getAdjacentNode(currentNode, 'N'); newDir = 'S'; }
+    } else if (car.fromDirection === 'E') {
+        if (car.intendedTurn === 'straight') { nextNodeId = this.getAdjacentNode(currentNode, 'W'); newDir = 'E'; }
+        else if (car.intendedTurn === 'left') { nextNodeId = this.getAdjacentNode(currentNode, 'N'); newDir = 'S'; }
+        else if (car.intendedTurn === 'right') { nextNodeId = this.getAdjacentNode(currentNode, 'S'); newDir = 'N'; }
     }
-    
+
     car.fromDirection = newDir;
-    
-    // Apply lane offset for the new direction based on NEXT intended turn
     car.intendedTurn = this.pickTurn();
+    
+    // Apply lane offset for the new direction
     const laneOffset = car.intendedTurn === 'left' ? 2 : 6;
     if (newDir === 'N') car.x -= laneOffset;
     if (newDir === 'S') car.x += laneOffset;
-    if (newDir === 'W') car.z += laneOffset; // driving East, right side is +Z
-    if (newDir === 'E') car.z -= laneOffset; // driving West, right side is -Z
-    
-    // Find next node based on new heading
-    let nextNodeId = null;
-    if (car.fromDirection === 'N') {
-        // going South (+Z). Need node with same X, larger Z
-        const next = this.nodePositions.find(n => n.x === currentNode.x && n.z > currentNode.z);
-        if (next) nextNodeId = next.id;
-    } else if (car.fromDirection === 'S') {
-        // going North (-Z)
-        const next = this.nodePositions.find(n => n.x === currentNode.x && n.z < currentNode.z);
-        if (next) nextNodeId = next.id;
-    } else if (car.fromDirection === 'W') {
-        // going East (+X)
-        const next = this.nodePositions.find(n => n.z === currentNode.z && n.x > currentNode.x);
-        if (next) nextNodeId = next.id;
-    } else if (car.fromDirection === 'E') {
-        // going West (-X)
-        const next = this.nodePositions.find(n => n.z === currentNode.z && n.x < currentNode.x);
-        if (next) nextNodeId = next.id;
-    }
+    if (newDir === 'W') car.z += laneOffset;
+    if (newDir === 'E') car.z -= laneOffset;
 
-    car.targetNodeId = nextNodeId; // if null, it will just drive off screen
+    car.targetNodeId = nextNodeId; // if undefined, it will just drive off screen
   }
 
   private spawnCarSpecific(entryIndex: number, intendedTurn: 'straight' | 'left' | 'right') {
@@ -290,9 +300,13 @@ export class TrafficSimulation {
     if (entry.fromDir === 'W') sz += laneOffset;
     if (entry.fromDir === 'E') sz -= laneOffset;
 
-    // Check collision at spawn
+    // Check collision at spawn (only check cars in the same lane)
     for (let c of this.cars) {
-        if (Math.abs(c.x - sx) + Math.abs(c.z - sz) < this.safeDistance) return null;
+        if (entry.fromDir === 'N' || entry.fromDir === 'S') {
+            if (Math.abs(c.x - sx) < 1 && Math.abs(c.z - sz) < this.safeDistance) return null;
+        } else {
+            if (Math.abs(c.z - sz) < 1 && Math.abs(c.x - sx) < this.safeDistance) return null;
+        }
     }
 
     const car: Car = {
@@ -304,7 +318,8 @@ export class TrafficSimulation {
       waitTime: 0,
       targetNodeId: entry.targetId,
       fromDirection: entry.fromDir,
-      intendedTurn: intendedTurn
+      intendedTurn: intendedTurn,
+      isEmergency: Math.random() < 0.02
     };
     
     this.cars.push(car);
@@ -392,38 +407,54 @@ export class TrafficSimulation {
     }
     const d = (count: number) => count === 0 ? 0 : (count <= 2 ? 1 : (count <= 5 ? 2 : 3));
     
-    // Phase 2: State Augmentation (Green Wave)
-    // Find neighbors based on grid position
-    let neighbor1Phase = 0;
-    let neighbor2Phase = 0;
-    
-    if (nodeId === 'n00') {
-        neighbor1Phase = this.nodes.get('n10')?.phase || 0; // East
-        neighbor2Phase = this.nodes.get('n01')?.phase || 0; // South
-    } else if (nodeId === 'n10') {
-        neighbor1Phase = this.nodes.get('n00')?.phase || 0; // West
-        neighbor2Phase = this.nodes.get('n11')?.phase || 0; // South
-    } else if (nodeId === 'n01') {
-        neighbor1Phase = this.nodes.get('n11')?.phase || 0; // East
-        neighbor2Phase = this.nodes.get('n00')?.phase || 0; // North
-    } else if (nodeId === 'n11') {
-        neighbor1Phase = this.nodes.get('n01')?.phase || 0; // West
-        neighbor2Phase = this.nodes.get('n10')?.phase || 0; // North
-    }
+    // Phase 3: Strict Adjacent Neighbors State Augmentation + Emergency Vehicle Flag
+    const nodePos = this.nodePositions.find(n => n.id === nodeId)!;
+    const nN = this.nodes.get(this.getAdjacentNode(nodePos, 'N') || '')?.phase || -1;
+    const nS = this.nodes.get(this.getAdjacentNode(nodePos, 'S') || '')?.phase || -1;
+    const nE = this.nodes.get(this.getAdjacentNode(nodePos, 'E') || '')?.phase || -1;
+    const nW = this.nodes.get(this.getAdjacentNode(nodePos, 'W') || '')?.phase || -1;
 
-    return [node.phase, d(nsStraight), d(nsLeft), d(ewStraight), d(ewLeft), neighbor1Phase, neighbor2Phase];
+    let hasEmergency = 0;
+    for (let c of this.cars) {
+        if (c.targetNodeId === nodeId && c.isEmergency && this.distTo(c, nodePos) < 50) {
+            hasEmergency = 1;
+            break;
+        }
+    }
+    
+    return [node.phase, d(nsStraight), d(nsLeft), d(ewStraight), d(ewLeft), nN, nS, nE, nW, hasEmergency];
+  }
+  
+  // Phase 3 helper for distance
+  private distTo(car: Car, node: {x:number, z:number}) {
+      return Math.abs(car.x - node.x) + Math.abs(car.z - node.z);
+  }
+
+  // Get strict adjacent neighbors for reward blending
+  public getAdjacentNeighbors(nodeId: string): string[] {
+      const nodePos = this.nodePositions.find(n => n.id === nodeId)!;
+      const neighbors = [];
+      const nN = this.getAdjacentNode(nodePos, 'N'); if (nN) neighbors.push(nN);
+      const nS = this.getAdjacentNode(nodePos, 'S'); if (nS) neighbors.push(nS);
+      const nE = this.getAdjacentNode(nodePos, 'E'); if (nE) neighbors.push(nE);
+      const nW = this.getAdjacentNode(nodePos, 'W'); if (nW) neighbors.push(nW);
+      return neighbors;
   }
 
   // Get reward for a specific node
   public getNodeReward(nodeId: string): number {
     let waitingCars = 0;
+    let emergencyWaiting = false;
     for (let c of this.cars) {
        if (c.targetNodeId === nodeId && (c.waiting || c.speed < 0.1)) {
            waitingCars++;
+           if (c.isEmergency) emergencyWaiting = true;
        }
     }
     const passed = this.carsPassed.get(nodeId) || 0;
-    return (passed * 5) - waitingCars;
+    let reward = (passed * 5) - waitingCars;
+    if (emergencyWaiting) reward -= 50; // Harsh penalty for blocking emergency
+    return reward;
   }
 
   public resetCarsPassed(nodeId: string): void {

@@ -11,11 +11,15 @@ function App() {
   const simRef = useRef<TrafficSimulation>(new TrafficSimulation());
   const agentsRef = useRef(new Map([
     // [lr, gamma, epsilon, decay, min_epsilon]
-    // Slow down decay from 0.95 to 0.995 to allow more exploration
     ['n00', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)],
     ['n10', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)],
+    ['n20', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)],
     ['n01', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)],
-    ['n11', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)]
+    ['n11', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)],
+    ['n21', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)],
+    ['n02', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)],
+    ['n12', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)],
+    ['n22', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)]
   ]));
   const frameRef = useRef<number>();
   
@@ -27,6 +31,33 @@ function App() {
     totalCars: 0,
     avgWaitTime: '0.00'
   });
+  
+  // Phase 3: Continuous Sky Interpolation
+  const getSkyColor = (time: number) => {
+      // 0-15s: Day to Sunset
+      // 15-30s: Sunset to Night
+      // 30-60s: Night to Day
+      
+      const interpolate = (c1: number[], c2: number[], t: number) => {
+          const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
+          const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
+          const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
+          return `rgb(${r},${g},${b})`;
+      };
+      
+      const day = [135, 206, 235];   // #87CEEB
+      const sunset = [255, 176, 133]; // #FFB085
+      const night = [26, 37, 44];     // #1A252C
+      
+      if (time < 15) {
+          return interpolate(day, sunset, time / 15);
+      } else if (time < 30) {
+          return interpolate(sunset, night, (time - 15) / 15);
+      } else {
+          // Night to Day (slower, 30 seconds)
+          return interpolate(night, day, (time - 30) / 30);
+      }
+  };
   
   const [qStats, setQStats] = useState({
     episodes: 0,
@@ -43,7 +74,10 @@ function App() {
 
   const [mode, setMode] = useState<'ai' | 'fixed'>('ai');
   const [recordStatus, setRecordStatus] = useState<'idle' | 'recording' | 'replaying'>('idle');
+  const [timeOfDay, setTimeOfDay] = useState<number>(0);
   const fixedPhaseTimerRef = useRef(0);
+  const autoTrafficRef = useRef(true);
+  const [autoTrafficState, setAutoTrafficState] = useState(true);
 
   useEffect(() => {
     let lastTime = performance.now();
@@ -94,11 +128,12 @@ function App() {
                     simRef.current.applyAction(node.id, actions.get(node.id)!);
                 });
                 
-                // 3. Get Next States and Local Rewards
+                // 3. Get Next States and Local Rewards (with Flicker Penalty)
                 const nextStates = new Map<string, number[]>();
                 const localRewards = new Map<string, number>();
                 simRef.current.nodes.forEach(node => {
                     nextStates.set(node.id, simRef.current.getNodeState(node.id));
+                    // Phase 3 Flicker Penalty: action === 1 gets -2 reward penalty
                     localRewards.set(node.id, simRef.current.getNodeReward(node.id) - (actions.get(node.id) === 1 ? 2 : 0));
                 });
                 
@@ -106,12 +141,12 @@ function App() {
                 simRef.current.nodes.forEach(node => {
                     const agent = agentsRef.current.get(node.id)!;
                     
-                    // Find neighbors based on ID for reward blending
+                    // Phase 3: Strict Adjacent Neighbors Reward Blending
+                    const neighbors = simRef.current.getAdjacentNeighbors(node.id);
                     let neighborRewardSum = 0;
-                    if (node.id === 'n00') neighborRewardSum = (localRewards.get('n10')||0) + (localRewards.get('n01')||0);
-                    else if (node.id === 'n10') neighborRewardSum = (localRewards.get('n00')||0) + (localRewards.get('n11')||0);
-                    else if (node.id === 'n01') neighborRewardSum = (localRewards.get('n11')||0) + (localRewards.get('n00')||0);
-                    else if (node.id === 'n11') neighborRewardSum = (localRewards.get('n01')||0) + (localRewards.get('n10')||0);
+                    neighbors.forEach(nId => {
+                        neighborRewardSum += localRewards.get(nId) || 0;
+                    });
                     
                     const blendedReward = localRewards.get(node.id)! + 0.5 * neighborRewardSum;
                     
@@ -142,7 +177,7 @@ function App() {
                 
                 setQStats({
                     episodes: totalEpisodes,
-                    epsilon: avgEpsilon / 4,
+                    epsilon: avgEpsilon / 9, // Phase 3: 9 agents
                     reward: totalGlobalReward
                 });
             }
@@ -154,6 +189,22 @@ function App() {
             const currentStats = simRef.current.getGlobalStats();
             setStats(currentStats);
             
+            // Phase 3: Time of Day loop (0 to 60s)
+            setTimeOfDay(prev => {
+                const next = (prev + 1) % 60;
+                // Update Spawn Rate based on Time of Day if Auto is enabled
+                if (autoTrafficRef.current) {
+                    // Phase 3: Smooth continuous interpolation using a Cosine wave
+                    // Peak at t=0 (0.10), Trough at t=30 (0.002)
+                    const peak = 0.10;
+                    const trough = 0.002;
+                    const amplitude = (peak - trough) / 2;
+                    const offset = (peak + trough) / 2;
+                    simRef.current.spawnRate = amplitude * Math.cos((next / 60) * 2 * Math.PI) + offset;
+                }
+                return next;
+            });
+
             setChartData(prev => {
                 const now = new Date();
                 const timeStr = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
@@ -238,6 +289,8 @@ function App() {
 
   const handleSpawnRate = (rate: number) => {
     simRef.current.spawnRate = rate;
+    autoTrafficRef.current = false;
+    setAutoTrafficState(false);
     setTickCount(c => c + 1);
   };
 
@@ -249,7 +302,7 @@ function App() {
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1>Smart City: 2x2 Traffic Network</h1>
+        <h1>Smart City: 3x3 Traffic Network</h1>
         <p>Powered by Multi-Agent Reinforcement Learning</p>
       </header>
       
@@ -262,6 +315,11 @@ function App() {
             onReset={reset}
             spawnRate={simRef.current.spawnRate}
             onSpawnRateChange={handleSpawnRate}
+            autoTraffic={autoTrafficState}
+            onToggleAutoTraffic={(val) => {
+                autoTrafficRef.current = val;
+                setAutoTrafficState(val);
+            }}
             epsilon={qStats.epsilon}
             onEpsilonChange={handleEpsilon}
             mode={mode}
@@ -272,9 +330,25 @@ function App() {
             recordStatus={recordStatus}
             onRecordAction={handleRecordAction}
           />
+          <div style={{ marginTop: '1rem', padding: '10px', background: 'rgba(0,0,0,0.5)', borderRadius: '5px' }}>
+             <h4>
+                Time of Day: {
+                    timeOfDay < 15 ? '☀️ Morning Rush (Day)' : 
+                    timeOfDay < 30 ? '🌇 Evening Flow (Sunset)' : 
+                    timeOfDay < 45 ? '🌙 Midnight (Off-peak)' : 
+                    '🌅 Dawn (Building up)'
+                }
+             </h4>
+             <progress value={timeOfDay} max="60" style={{width: '100%'}} />
+          </div>
         </div>
         
-        <div className="view-panel">
+        {/* Phase 3 Dynamic Sky Background (Smooth Interpolation) */}
+        <div className="view-panel" style={{
+            backgroundImage: 'none',
+            backgroundColor: getSkyColor(timeOfDay),
+            transition: 'background-color 1s linear'
+        }}>
           <Intersection cars={simState.cars} nodes={simState.nodes} />
           {chartData.length > 0 && <CongestionChart data={chartData} />}
         </div>

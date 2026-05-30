@@ -24,14 +24,22 @@ const CarMesh = ({ car }: { car: Car }) => {
   }
 
   const color = useMemo(() => {
+    if (car.isEmergency) return '#ff1111'; // Emergency Red
     const colors = ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#2ecc71', '#e67e22'];
     const idx = parseInt(car.id.split('-')[1] || '0') % colors.length;
     return colors[idx];
-  }, [car.id]);
+  }, [car.id, car.isEmergency]);
 
+  // Phase 3: Emergency Vehicle Visuals
+  const isEm = car.isEmergency;
+  
   return (
     <Box position={position} rotation={rotation} args={[2, 1, 4]} castShadow>
-      <meshStandardMaterial color={color} />
+      <meshStandardMaterial 
+        color={color} 
+        emissive={isEm ? "#ff0000" : "#000"} 
+        emissiveIntensity={isEm ? (Date.now() % 500 < 250 ? 5 : 0) : 0} 
+      />
     </Box>
   );
 };
@@ -110,7 +118,7 @@ const IntersectionNode = ({ node }: { node: Node }) => {
 export const Intersection: React.FC<CityNetworkProps> = ({ cars, nodes }) => {
   return (
     <div style={{ width: '100%', height: '100%', borderRadius: '12px', overflow: 'hidden' }}>
-      <Canvas shadows camera={{ position: [0, 180, 180], fov: 45 }}>
+      <Canvas shadows camera={{ position: [0, 250, 250], fov: 45 }}>
         <ambientLight intensity={0.4} />
         <directionalLight position={[50, 150, 50]} castShadow intensity={0.8} shadow-camera-far={500} shadow-camera-left={-200} shadow-camera-right={200} shadow-camera-top={200} shadow-camera-bottom={-200} />
         
@@ -119,22 +127,20 @@ export const Intersection: React.FC<CityNetworkProps> = ({ cars, nodes }) => {
           <meshStandardMaterial color="#2c3e50" />
         </Plane>
         
-        {/* Main Roads (Grid) */}
-        {/* Vertical Roads */}
-        <Plane args={[20, 400]} rotation={[-Math.PI / 2, 0, 0]} position={[-50, 0.01, 0]} receiveShadow>
-          <meshStandardMaterial color="#34495e" />
-        </Plane>
-        <Plane args={[20, 400]} rotation={[-Math.PI / 2, 0, 0]} position={[50, 0.01, 0]} receiveShadow>
-          <meshStandardMaterial color="#34495e" />
-        </Plane>
+        {/* Phase 3: 3x3 Main Roads (Grid) */}
+        {/* Vertical Roads at -100, 0, 100 */}
+        {[-100, 0, 100].map(x => (
+            <Plane key={`vroad-${x}`} args={[20, 400]} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.01, 0]} receiveShadow>
+              <meshStandardMaterial color="#34495e" />
+            </Plane>
+        ))}
         
-        {/* Horizontal Roads */}
-        <Plane args={[400, 20]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, -50]} receiveShadow>
-          <meshStandardMaterial color="#34495e" />
-        </Plane>
-        <Plane args={[400, 20]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 50]} receiveShadow>
-          <meshStandardMaterial color="#34495e" />
-        </Plane>
+        {/* Horizontal Roads at -100, 0, 100 */}
+        {[-100, 0, 100].map(z => (
+            <Plane key={`hroad-${z}`} args={[400, 20]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, z]} receiveShadow>
+              <meshStandardMaterial color="#34495e" />
+            </Plane>
+        ))}
 
         {/* Intersection Nodes */}
         {nodes.map(node => (

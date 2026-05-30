@@ -7,6 +7,8 @@ interface ControlsProps {
   onReset: () => void;
   spawnRate: number;
   onSpawnRateChange: (rate: number) => void;
+  autoTraffic: boolean;
+  onToggleAutoTraffic: (val: boolean) => void;
   epsilon: number;
   onEpsilonChange: (eps: number) => void;
   mode: 'ai' | 'fixed';
@@ -21,6 +23,8 @@ export const Controls: React.FC<ControlsProps> = ({
   onReset,
   spawnRate,
   onSpawnRateChange,
+  autoTraffic,
+  onToggleAutoTraffic,
   epsilon,
   onEpsilonChange,
   mode,
@@ -33,16 +37,20 @@ export const Controls: React.FC<ControlsProps> = ({
       <h2 className="panel-title">Simulation Controls</h2>
       
       <div className="control-group" title="交通密度：調整新車輛進入路網的頻率。往右調高會模擬尖峰時段，車輛較多容易造成壅塞。">
-        <label className="control-label">
-          <Settings2 size={16} /> Traffic Density (Peak / Off-peak)
+        <label className="control-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span><Settings2 size={16} /> Traffic Density</span>
+          <label style={{ fontSize: '0.9em', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: autoTraffic ? '#10b981' : '#94a3b8' }}>
+            <input type="checkbox" checked={autoTraffic} onChange={(e) => onToggleAutoTraffic(e.target.checked)} />
+            Auto (Day/Night)
+          </label>
         </label>
         <div className="slider-container">
           <span className="slider-val">Low</span>
           <input 
             type="range" 
-            min="0.005" 
-            max="0.08" 
-            step="0.005"
+            min="0.001" 
+            max="0.100" 
+            step="0.001"
             value={spawnRate} 
             onChange={(e) => onSpawnRateChange(parseFloat(e.target.value))} 
             className="slider"
