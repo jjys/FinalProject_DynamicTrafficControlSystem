@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TrafficSimulation } from './models/TrafficSimulation';
 import { QLearning } from './models/QLearning';
 import { Dashboard } from './components/Dashboard';
@@ -21,7 +21,7 @@ function App() {
     ['n12', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)],
     ['n22', new QLearning(0.1, 0.9, 1.0, 0.995, 0.05)]
   ]));
-  const frameRef = useRef<number>();
+  const frameRef = useRef<number>(0);
   
   const [running, setRunning] = useState(false);
   const [, setTickCount] = useState(0);

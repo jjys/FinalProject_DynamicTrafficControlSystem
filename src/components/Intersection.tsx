@@ -9,7 +9,6 @@ interface CityNetworkProps {
 }
 
 const CarMesh = ({ car }: { car: Car }) => {
-  const laneWidth = 4;
   let position: [number, number, number] = [car.x, 0.5, car.z];
   let rotation: [number, number, number] = [0, 0, 0];
   
