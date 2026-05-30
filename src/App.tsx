@@ -78,20 +78,44 @@ function App() {
                 let totalEpisodes = 0;
                 let avgEpsilon = 0;
                 let totalGlobalReward = 0;
-
-                // Each agent takes an action
+                
+                // Phase 2: Cooperative MARL
+                // 1. Get Actions
+                const actions = new Map<string, number>();
+                const states = new Map<string, number[]>();
+                simRef.current.nodes.forEach(node => {
+                    const state = simRef.current.getNodeState(node.id);
+                    states.set(node.id, state);
+                    actions.set(node.id, agentsRef.current.get(node.id)!.getAction(state));
+                });
+                
+                // 2. Apply Actions
+                simRef.current.nodes.forEach(node => {
+                    simRef.current.applyAction(node.id, actions.get(node.id)!);
+                });
+                
+                // 3. Get Next States and Local Rewards
+                const nextStates = new Map<string, number[]>();
+                const localRewards = new Map<string, number>();
+                simRef.current.nodes.forEach(node => {
+                    nextStates.set(node.id, simRef.current.getNodeState(node.id));
+                    localRewards.set(node.id, simRef.current.getNodeReward(node.id) - (actions.get(node.id) === 1 ? 2 : 0));
+                });
+                
+                // 4. Compute Blended Rewards and Learn
                 simRef.current.nodes.forEach(node => {
                     const agent = agentsRef.current.get(node.id)!;
-                    const state = simRef.current.getNodeState(node.id);
-                    const action = agent.getAction(state);
                     
-                    simRef.current.applyAction(node.id, action);
+                    // Find neighbors based on ID for reward blending
+                    let neighborRewardSum = 0;
+                    if (node.id === 'n00') neighborRewardSum = (localRewards.get('n10')||0) + (localRewards.get('n01')||0);
+                    else if (node.id === 'n10') neighborRewardSum = (localRewards.get('n00')||0) + (localRewards.get('n11')||0);
+                    else if (node.id === 'n01') neighborRewardSum = (localRewards.get('n11')||0) + (localRewards.get('n00')||0);
+                    else if (node.id === 'n11') neighborRewardSum = (localRewards.get('n01')||0) + (localRewards.get('n10')||0);
                     
-                    const nextState = simRef.current.getNodeState(node.id);
-                    // Reduce passed reward from 5 to 2 so it doesn't outweigh massive waiting penalties
-                    const reward = simRef.current.getNodeReward(node.id) - (action === 1 ? 2 : 0);
+                    const blendedReward = localRewards.get(node.id)! + 0.5 * neighborRewardSum;
                     
-                    agent.learn(state, action, reward, nextState);
+                    agent.learn(states.get(node.id)!, actions.get(node.id)!, blendedReward, nextStates.get(node.id)!);
                     simRef.current.resetCarsPassed(node.id);
                     agent.endEpisode();
 
@@ -102,16 +126,16 @@ function App() {
                             timestamp: Date.now(),
                             episode: agent.trainingEpisodes,
                             nodeId: node.id,
-                            state: agent.getStateString(state),
-                            action,
-                            reward,
-                            nextState: agent.getStateString(nextState),
+                            state: agent.getStateString(states.get(node.id)!),
+                            action: actions.get(node.id)!,
+                            reward: blendedReward,
+                            nextState: agent.getStateString(nextStates.get(node.id)!),
                             epsilon: agent.getEpsilon(),
-                            qValues: agent.getQValues(agent.getStateString(state))
+                            qValues: agent.getQValues(agent.getStateString(states.get(node.id)!))
                         })
                     }).catch(() => {});
                     
-                    totalEpisodes = agent.trainingEpisodes; // roughly same for all
+                    totalEpisodes = agent.trainingEpisodes;
                     avgEpsilon += agent.getEpsilon();
                     totalGlobalReward += agent.totalReward;
                 });

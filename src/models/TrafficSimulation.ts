@@ -38,7 +38,7 @@ export class TrafficSimulation {
   private maxSpeed = 1.0;
   private acceleration = 0.05;
   private stoppingDistance = 12; // Distance from center of node to stop
-  private safeDistance = 10;
+  private safeDistance = 6;
   private carIdCounter = 0;
   
   private nodePositions = [
@@ -391,7 +391,27 @@ export class TrafficSimulation {
       }
     }
     const d = (count: number) => count === 0 ? 0 : (count <= 2 ? 1 : (count <= 5 ? 2 : 3));
-    return [node.phase, d(nsStraight), d(nsLeft), d(ewStraight), d(ewLeft)];
+    
+    // Phase 2: State Augmentation (Green Wave)
+    // Find neighbors based on grid position
+    let neighbor1Phase = 0;
+    let neighbor2Phase = 0;
+    
+    if (nodeId === 'n00') {
+        neighbor1Phase = this.nodes.get('n10')?.phase || 0; // East
+        neighbor2Phase = this.nodes.get('n01')?.phase || 0; // South
+    } else if (nodeId === 'n10') {
+        neighbor1Phase = this.nodes.get('n00')?.phase || 0; // West
+        neighbor2Phase = this.nodes.get('n11')?.phase || 0; // South
+    } else if (nodeId === 'n01') {
+        neighbor1Phase = this.nodes.get('n11')?.phase || 0; // East
+        neighbor2Phase = this.nodes.get('n00')?.phase || 0; // North
+    } else if (nodeId === 'n11') {
+        neighbor1Phase = this.nodes.get('n01')?.phase || 0; // West
+        neighbor2Phase = this.nodes.get('n10')?.phase || 0; // North
+    }
+
+    return [node.phase, d(nsStraight), d(nsLeft), d(ewStraight), d(ewLeft), neighbor1Phase, neighbor2Phase];
   }
 
   // Get reward for a specific node
