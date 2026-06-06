@@ -194,11 +194,12 @@ export class TrafficSimulation {
       }
 
       // Accelerate/Decelerate
+      const accelStep = this.acceleration * deltaTime * 60;
       if (car.speed < targetSpeed) {
-        car.speed = Math.min(targetSpeed, car.speed + this.acceleration);
+        car.speed = Math.min(targetSpeed, car.speed + accelStep);
       } else if (car.speed > targetSpeed) {
         // Brake harder than accelerate
-        car.speed = Math.max(targetSpeed, car.speed - this.acceleration * 4);
+        car.speed = Math.max(targetSpeed, car.speed - accelStep * 4);
       }
 
       // Move car
@@ -414,15 +415,19 @@ export class TrafficSimulation {
     const nE = this.nodes.get(this.getAdjacentNode(nodePos, 'E') || '')?.phase || -1;
     const nW = this.nodes.get(this.getAdjacentNode(nodePos, 'W') || '')?.phase || -1;
 
-    let hasEmergency = 0;
+    let emergencyPhase = 0;
     for (let c of this.cars) {
         if (c.targetNodeId === nodeId && c.isEmergency && this.distTo(c, nodePos) < 50) {
-            hasEmergency = 1;
+            if (c.fromDirection === 'N' || c.fromDirection === 'S') {
+                emergencyPhase = c.intendedTurn === 'left' ? 2 : 1; // 1 = Phase 0, 2 = Phase 1
+            } else {
+                emergencyPhase = c.intendedTurn === 'left' ? 4 : 3; // 3 = Phase 2, 4 = Phase 3
+            }
             break;
         }
     }
     
-    return [node.phase, d(nsStraight), d(nsLeft), d(ewStraight), d(ewLeft), nN, nS, nE, nW, hasEmergency];
+    return [node.phase, d(nsStraight), d(nsLeft), d(ewStraight), d(ewLeft), nN, nS, nE, nW, emergencyPhase];
   }
   
   // Phase 3 helper for distance
