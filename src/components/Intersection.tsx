@@ -43,22 +43,26 @@ const CarMesh = ({ car }: { car: Car }) => {
   );
 };
 
-const TrafficLight = ({ position, rotation = [0, 0, 0], isGreen }: { position: [number, number, number], rotation?: [number, number, number], isGreen: boolean }) => {
+const TrafficLight = ({ position, rotation, lightState }: { position: [number, number, number], rotation: [number, number, number], lightState: 'red' | 'yellow' | 'green' }) => {
   return (
     <group position={position} rotation={rotation}>
-      <Box position={[0, 4, 0]} args={[1, 3, 1]}>
+      <Box position={[0, 4.5, 0.5]} args={[1.2, 3.5, 1.2]}>
         <meshStandardMaterial color="#333" />
       </Box>
       <Box position={[0, 2, 0]} args={[0.5, 4, 0.5]}>
         <meshStandardMaterial color="#555" />
       </Box>
+      <mesh position={[0, 5.5, 0.6]}>
+        <sphereGeometry args={[0.3, 16, 16]} />
+        <meshStandardMaterial color={lightState === 'red' ? "#e74c3c" : "#111"} emissive={lightState === 'red' ? "#e74c3c" : "#000"} emissiveIntensity={2} />
+      </mesh>
       <mesh position={[0, 4.5, 0.6]}>
-        <sphereGeometry args={[0.4, 16, 16]} />
-        <meshStandardMaterial color={isGreen ? "#111" : "#e74c3c"} emissive={isGreen ? "#000" : "#e74c3c"} emissiveIntensity={2} />
+        <sphereGeometry args={[0.3, 16, 16]} />
+        <meshStandardMaterial color={lightState === 'yellow' ? "#f1c40f" : "#111"} emissive={lightState === 'yellow' ? "#f1c40f" : "#000"} emissiveIntensity={2} />
       </mesh>
       <mesh position={[0, 3.5, 0.6]}>
-        <sphereGeometry args={[0.4, 16, 16]} />
-        <meshStandardMaterial color={isGreen ? "#2ecc71" : "#111"} emissive={isGreen ? "#2ecc71" : "#000"} emissiveIntensity={2} />
+        <sphereGeometry args={[0.3, 16, 16]} />
+        <meshStandardMaterial color={lightState === 'green' ? "#2ecc71" : "#111"} emissive={lightState === 'green' ? "#2ecc71" : "#000"} emissiveIntensity={2} />
       </mesh>
     </group>
   );
@@ -71,10 +75,19 @@ const StopLine = ({ position, rotation }: { position: [number, number, number], 
 );
 
 const IntersectionNode = ({ node }: { node: Node }) => {
-  const nsStraightGreen = node.phase === 0;
-  const nsLeftGreen = node.phase === 1;
-  const ewStraightGreen = node.phase === 2;
-  const ewLeftGreen = node.phase === 3;
+  const isYellow = node.yellowTimer !== undefined && node.yellowTimer > 0;
+  
+  const getLightState = (phaseMatch: boolean): 'red' | 'yellow' | 'green' => {
+      if (phaseMatch) {
+          return isYellow ? 'yellow' : 'green';
+      }
+      return 'red';
+  };
+
+  const nsStraightState = getLightState(node.phase === 0);
+  const nsLeftState = getLightState(node.phase === 1);
+  const ewStraightState = getLightState(node.phase === 2);
+  const ewLeftState = getLightState(node.phase === 3);
 
   return (
     <group position={[node.x, 0, node.z]}>
@@ -95,21 +108,21 @@ const IntersectionNode = ({ node }: { node: Node }) => {
 
       {/* N-S Lights */}
       {/* Coming from North (facing North) */}
-      <TrafficLight position={[-8, 0, -10]} rotation={[0, Math.PI, 0]} isGreen={nsStraightGreen} /> {/* Straight */}
-      <TrafficLight position={[-2, 0, -10]} rotation={[0, Math.PI, 0]} isGreen={nsLeftGreen} />     {/* Left */}
+      <TrafficLight position={[-8, 0, -10]} rotation={[0, Math.PI, 0]} lightState={nsStraightState} /> {/* Straight */}
+      <TrafficLight position={[-2, 0, -10]} rotation={[0, Math.PI, 0]} lightState={nsLeftState} />     {/* Left */}
       
       {/* Coming from South (facing South) */}
-      <TrafficLight position={[8, 0, 10]} rotation={[0, 0, 0]} isGreen={nsStraightGreen} />       {/* Straight */}
-      <TrafficLight position={[2, 0, 10]} rotation={[0, 0, 0]} isGreen={nsLeftGreen} />         {/* Left */}
+      <TrafficLight position={[8, 0, 10]} rotation={[0, 0, 0]} lightState={nsStraightState} />       {/* Straight */}
+      <TrafficLight position={[2, 0, 10]} rotation={[0, 0, 0]} lightState={nsLeftState} />         {/* Left */}
       
       {/* E-W Lights */}
       {/* Coming from West (facing West) */}
-      <TrafficLight position={[-10, 0, 8]} rotation={[0, -Math.PI / 2, 0]} isGreen={ewStraightGreen} /> {/* Straight */}
-      <TrafficLight position={[-10, 0, 2]} rotation={[0, -Math.PI / 2, 0]} isGreen={ewLeftGreen} />     {/* Left */}
+      <TrafficLight position={[-10, 0, 8]} rotation={[0, -Math.PI / 2, 0]} lightState={ewStraightState} /> {/* Straight */}
+      <TrafficLight position={[-10, 0, 2]} rotation={[0, -Math.PI / 2, 0]} lightState={ewLeftState} />     {/* Left */}
       
       {/* Coming from East (facing East) */}
-      <TrafficLight position={[10, 0, -8]} rotation={[0, Math.PI / 2, 0]} isGreen={ewStraightGreen} />  {/* Straight */}
-      <TrafficLight position={[10, 0, -2]} rotation={[0, Math.PI / 2, 0]} isGreen={ewLeftGreen} />      {/* Left */}
+      <TrafficLight position={[10, 0, -8]} rotation={[0, Math.PI / 2, 0]} lightState={ewStraightState} />  {/* Straight */}
+      <TrafficLight position={[10, 0, -2]} rotation={[0, Math.PI / 2, 0]} lightState={ewLeftState} />      {/* Left */}
     </group>
   );
 };

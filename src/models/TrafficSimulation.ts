@@ -5,6 +5,8 @@ export interface Node {
   x: number;
   z: number;
   phase: number; // 0 for N-S, 1 for E-W
+  nextPhase?: number;
+  yellowTimer?: number;
 }
 
 export interface Car {
@@ -107,6 +109,16 @@ export class TrafficSimulation {
     // Update node timers
     this.nodes.forEach(n => {
         this.timeInPhase.set(n.id, this.timeInPhase.get(n.id)! + deltaTime);
+        if (n.yellowTimer !== undefined && n.yellowTimer > 0) {
+            n.yellowTimer -= deltaTime;
+            if (n.yellowTimer <= 0) {
+                if (n.nextPhase !== undefined) {
+                    n.phase = n.nextPhase;
+                    n.nextPhase = undefined;
+                }
+                n.yellowTimer = 0;
+            }
+        }
     });
 
     // 2. Update cars
@@ -129,6 +141,10 @@ export class TrafficSimulation {
       } else {
           if (car.intendedTurn === 'left' && node.phase === 3) isRedLight = false;
           if (car.intendedTurn !== 'left' && node.phase === 2) isRedLight = false;
+      }
+      
+      if (!isRedLight && node.yellowTimer !== undefined && node.yellowTimer > 0) {
+          targetSpeed = this.maxSpeed * 0.5; // Decelerate on yellow
       }
       
       // Calculate distance to center of target node along the primary axis of travel
@@ -467,11 +483,18 @@ export class TrafficSimulation {
   }
 
   public applyAction(nodeId: string, action: number) {
-    const node = this.nodes.get(nodeId)!;
-    if (action === 1) {
-        node.phase = (node.phase + 1) % 4;
-        this.timeInPhase.set(nodeId, 0);
-    }
+      const node = this.nodes.get(nodeId);
+      if (node) {
+          if (action === 1 && (node.yellowTimer === undefined || node.yellowTimer <= 0)) {
+              node.nextPhase = (node.phase + 1) % 4;
+              node.yellowTimer = 2.0; // 2 seconds yellow light
+              this.timeInPhase.set(nodeId, 0);
+          } else if (action === 1 && node.yellowTimer !== undefined && node.yellowTimer > 0) {
+              // Ignore action if already transitioning
+          } else if (action === 0) {
+              // Do nothing, just accumulate timeInPhase
+          }
+      }
   }
 
   public getGlobalStats() {
