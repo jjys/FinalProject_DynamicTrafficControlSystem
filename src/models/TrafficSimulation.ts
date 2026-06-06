@@ -143,10 +143,6 @@ export class TrafficSimulation {
           if (car.intendedTurn !== 'left' && node.phase === 2) isRedLight = false;
       }
       
-      if (!isRedLight && node.yellowTimer !== undefined && node.yellowTimer > 0) {
-          targetSpeed = this.maxSpeed * 0.5; // Decelerate on yellow
-      }
-      
       // Calculate distance to center of target node along the primary axis of travel
       let distToIntersection = 0;
       if (car.fromDirection === 'N') distToIntersection = node.z - car.z; // comes from North(-Z), heading South(+Z)
@@ -154,8 +150,15 @@ export class TrafficSimulation {
       else if (car.fromDirection === 'W') distToIntersection = node.x - car.x; // comes from West(-X), heading East(+X)
       else if (car.fromDirection === 'E') distToIntersection = car.x - node.x; // comes from East(+X), heading West(-X)
 
-      // Yellow light clearance: If the light just turned red but we are going fast and are too close to stop (within 6 units of the stop line), just clear the intersection!
-      if (isRedLight && car.speed > 0.6 && distToIntersection > 0 && (distToIntersection - this.stoppingDistance) < 6) {
+      if (!isRedLight && node.yellowTimer !== undefined && node.yellowTimer > 0) {
+          let distToStopLine = distToIntersection - this.stoppingDistance;
+          if (distToStopLine > 10) {
+              targetSpeed = this.maxSpeed * 0.5; // Decelerate on yellow if far enough
+          }
+      }
+
+      // Yellow light clearance: If the light just turned red but we are moving and are too close to stop (within 6 units of the stop line), just clear the intersection!
+      if (isRedLight && car.speed > 0.1 && distToIntersection > 0 && (distToIntersection - this.stoppingDistance) < 6) {
           isRedLight = false;
       }
 
