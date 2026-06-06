@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import React, { useMemo, useRef } from 'react';
+import * as THREE from 'three';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Box, Plane } from '@react-three/drei';
 import type { Car, Node } from '../models/TrafficSimulation';
 
