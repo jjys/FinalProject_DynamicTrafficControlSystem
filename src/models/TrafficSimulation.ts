@@ -157,14 +157,11 @@ export class TrafficSimulation {
           }
       }
 
-      // Yellow light clearance: If the light just turned red but we are moving and are too close to stop (within 6 units of the stop line), just clear the intersection!
-      // Also, if the car's front has already passed the stop line (distToStopLine < 0), it MUST clear the intersection!
+      // If the car's front has already passed the stop line (distToStopLine < 0), it MUST clear the intersection!
       if (isRedLight && distToIntersection > 0) {
           let distToStopLine = distToIntersection - this.stoppingDistance;
           if (distToStopLine < 0) {
               isRedLight = false; // Already passed the stop line, keep going!
-          } else if (distToStopLine < 6 && car.speed > 0.1) {
-              isRedLight = false; // Dilemma zone, keep going!
           }
       }
 
