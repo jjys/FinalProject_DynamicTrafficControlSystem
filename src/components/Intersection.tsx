@@ -46,7 +46,7 @@ const CarMesh = ({ car }: { car: Car }) => {
 const TrafficLight = ({ position, rotation, lightState }: { position: [number, number, number], rotation: [number, number, number], lightState: 'red' | 'yellow' | 'green' }) => {
   return (
     <group position={position} rotation={rotation}>
-      <Box position={[0, 4.5, 0.5]} args={[1.2, 3.5, 1.2]}>
+      <Box position={[0, 4.5, 0]} args={[1.2, 3.5, 1.0]}>
         <meshStandardMaterial color="#333" />
       </Box>
       <Box position={[0, 2, 0]} args={[0.5, 4, 0.5]}>
