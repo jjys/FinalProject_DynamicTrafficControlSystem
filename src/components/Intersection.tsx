@@ -8,38 +8,50 @@ interface CityNetworkProps {
   nodes: Node[];
 }
 
+// Cache geometry and materials to prevent WebGL memory leaks (OOM)
+const carGeometry = new THREE.BoxGeometry(2, 1, 4);
+const colors = ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#2ecc71', '#e67e22'];
+const carMaterials = colors.map(c => new THREE.MeshStandardMaterial({ color: c }));
+const emergencyMaterial = new THREE.MeshStandardMaterial({ color: "#ff1111", emissive: "#ff0000" });
+
 const CarMesh = ({ car }: { car: Car }) => {
-  let position: [number, number, number] = [car.x, 0.5, car.z];
-  let rotation: [number, number, number] = [0, 0, 0];
+  const meshRef = useRef<THREE.Mesh>(null);
   
-  if (car.fromDirection === 'N') {
-    rotation = [0, 0, 0]; // Heading South
-  } else if (car.fromDirection === 'S') {
-    rotation = [0, Math.PI, 0]; // Heading North
-  } else if (car.fromDirection === 'W') {
-    rotation = [0, -Math.PI / 2, 0]; // Heading East
-  } else if (car.fromDirection === 'E') {
-    rotation = [0, Math.PI / 2, 0]; // Heading West
-  }
+  useFrame(() => {
+    if (!meshRef.current) return;
+    
+    let rotationY = 0;
+    if (car.fromDirection === 'N') {
+      rotationY = 0;
+    } else if (car.fromDirection === 'S') {
+      rotationY = Math.PI;
+    } else if (car.fromDirection === 'W') {
+      rotationY = -Math.PI / 2;
+    } else if (car.fromDirection === 'E') {
+      rotationY = Math.PI / 2;
+    }
 
-  const color = useMemo(() => {
-    if (car.isEmergency) return '#ff1111'; // Emergency Red
-    const colors = ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#2ecc71', '#e67e22'];
-    const idx = parseInt(car.id.split('-')[1] || '0') % colors.length;
-    return colors[idx];
-  }, [car.id, car.isEmergency]);
+    meshRef.current.position.set(car.x, 0.5, car.z);
+    meshRef.current.rotation.set(0, rotationY, 0);
 
-  // Phase 3: Emergency Vehicle Visuals
-  const isEm = car.isEmergency;
+    if (car.isEmergency) {
+      meshRef.current.material = emergencyMaterial;
+      emergencyMaterial.emissiveIntensity = (Date.now() % 500 < 250 ? 5 : 0);
+    } else {
+      const idx = parseInt(car.id.split('-')[1] || '0') % carMaterials.length;
+      meshRef.current.material = carMaterials[idx];
+    }
+  });
+  
+  const idx = parseInt(car.id.split('-')[1] || '0') % carMaterials.length;
   
   return (
-    <Box position={position} rotation={rotation} args={[2, 1, 4]} castShadow>
-      <meshStandardMaterial 
-        color={color} 
-        emissive={isEm ? "#ff0000" : "#000"} 
-        emissiveIntensity={isEm ? (Date.now() % 500 < 250 ? 5 : 0) : 0} 
-      />
-    </Box>
+    <mesh 
+      ref={meshRef} 
+      geometry={carGeometry}
+      material={car.isEmergency ? emergencyMaterial : carMaterials[idx]}
+      castShadow
+    />
   );
 };
 
